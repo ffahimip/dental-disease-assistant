@@ -31,7 +31,7 @@ with st.expander("ℹ️ About this prototype"):
 # -----------------------------
 # ✅ Replace these with your real values (or keep your existing ones from old app.py)
 DIFY_URL = "https://api.dify.ai/v1/chat-messages"
-DIFY_API_KEY = "app-zGyqZOv41RDBmUcbRB1tsf9n"
+DIFY_API_KEY = "app-b11kL4oGRJ4OfZhEr6d8v2JW"
 
 # -----------------------------
 # 3) USER INPUTS
