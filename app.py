@@ -35,7 +35,7 @@ DIFY_URL = "https://api.dify.ai/v1/chat-messages"
 # Add this in Secrets (TOML):
 # DIFY_API_KEY = "app-xxxxxxxxxxxxxxxx"
 try:
-    DIFY_API_KEY = st.secrets["app-b11kL4oGRJ4OfZhEr6d8v2JW"]
+    DIFY_API_KEY = st.secrets["app-Vg5HnRRHlmhZUlL7T7ud9ofA"]
 except Exception:
     st.error("Missing DIFY_API_KEY in Streamlit Secrets. Add it in App Settings → Secrets.")
     st.stop()
