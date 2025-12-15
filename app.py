@@ -1,11 +1,10 @@
 import streamlit as st
 import requests
 import json
-import os
 
-# -----------------------------
-# PAGE SETTINGS
-# -----------------------------
+# =========================================
+# 1) PAGE SETTINGS / HEADER
+# =========================================
 st.set_page_config(
     page_title="Dental Disease Assistant (DDA)",
     layout="centered"
@@ -20,46 +19,62 @@ with st.expander("ℹ️ About this prototype"):
     st.markdown(
         """
         **Dental Disease Assistant (DDA)** is a Retrieval-Augmented Generation (RAG) system.
-        It retrieves relevant passages from a curated knowledge base and generates a structured response with references.
 
-        **Safety:** If no supporting evidence is retrieved, the system returns an *Insufficient Evidence* response.
+        It retrieves relevant passages from a curated knowledge base (AAP/AAE/ADA + internal mapping sheets)
+        and generates a structured response with references.
+
+        **Safety behavior:** If no supporting evidence is retrieved from the knowledge base,
+        the assistant returns an *Insufficient Evidence* response (no guessing).
         """
     )
 
-# -----------------------------
-# DEBUG: SHOW WHICH SECRETS KEYS ARE VISIBLE (SAFE)
-# -----------------------------
-with st.expander("🧪 Debug (Secrets) — open only if needed"):
-    st.write("Visible secret keys:", list(st.secrets.keys()))
-    st.write("Visible env var DIFY_API_KEY:", "YES" if os.environ.get("DIFY_API_KEY") else "NO")
+with st.expander("✅ Example prompts (copy/paste)"):
+    st.markdown(
+        """
+        **Clinician example**
+        - “Tooth #30 has ~40% radiographic bone loss, Class II furcation, PD 6 mm, CAL 7 mm.  
+          Provide likely Stage/Grade and confirmatory steps.”
 
-# -----------------------------
-# DIFY SETTINGS
-# -----------------------------
+        **Patient example**
+        - “My gums bleed when I brush. What could that mean and what should I ask my dentist?”
+        """
+    )
+
+# =========================================
+# 2) DIFY CONFIG (SAFE: key comes from Secrets)
+# =========================================
 DIFY_URL = "https://api.dify.ai/v1/chat-messages"
 
-# Robust key loading: Streamlit Secrets OR environment variable fallback
-DIFY_API_KEY = st.secrets.get("app-Vg5HnRRHlmhZUlL7T7ud9ofA") or os.environ.get("app-Vg5HnRRHlmhZUlL7T7ud9ofA")
-
-if not DIFY_API_KEY:
+# Streamlit Cloud -> App Settings -> Secrets (TOML):
+# DIFY_API_KEY = "app-xxxxxxxxxxxxxxxx"
+if "DIFY_API_KEY" not in st.secrets:
     st.error(
         "Missing DIFY_API_KEY in Streamlit Secrets.\n\n"
         "Fix:\n"
         "1) Go to App Settings → Secrets\n"
-        "2) Paste ONLY this line (TOML):\n"
-        '   DIFY_API_KEY = "app-xxxxxxxxxxxxxxxx"\n'
-        "3) Save, wait ~60 seconds, then Reboot app.\n\n"
-        f"Debug: Visible secret keys right now: {list(st.secrets.keys())}"
+        '2) Paste exactly this (TOML):  DIFY_API_KEY = "app-xxxxxxxxxxxxxxxx"\n'
+        "3) Save and Reboot the app\n"
     )
     st.stop()
 
-# -----------------------------
-# INPUTS
-# -----------------------------
+DIFY_API_KEY = str(st.secrets["DIFY_API_KEY"]).strip()
+
+# Basic validation (does not print the key)
+if not DIFY_API_KEY.startswith("app-") or len(DIFY_API_KEY) < 10:
+    st.error(
+        "DIFY_API_KEY is present but appears invalid.\n\n"
+        'It must look like:  DIFY_API_KEY = "app-xxxxxxxxxxxxxxxx"\n'
+        "Do NOT use app-app-... (double prefix).\n"
+    )
+    st.stop()
+
+# =========================================
+# 3) INPUTS
+# =========================================
 st.subheader("Who is this response for?")
 role = st.radio(
-    "",
-    ["Clinician", "Patient"],
+    label="",
+    options=["Clinician", "Patient"],
     horizontal=True
 )
 
@@ -75,73 +90,19 @@ findings_json = st.text_area(
     placeholder='{"tooth":"30","finding":"bone loss","severity":"moderate"}'
 )
 
-# Optional: validate JSON (does not block submission, just warns)
+# Validate JSON (optional — warning only)
 if findings_json.strip():
     try:
         json.loads(findings_json)
+        st.caption("✅ JSON looks valid.")
     except json.JSONDecodeError:
-        st.warning("Optional Findings is not valid JSON. You can leave it empty or fix formatting.")
+        st.warning("⚠️ Optional Findings is not valid JSON. You can leave it empty or fix formatting.")
 
-# -----------------------------
-# RUN BUTTON
-# -----------------------------
+# =========================================
+# 4) RUN BUTTON (CALL DIFY)
+# =========================================
 if st.button("Run Dental Disease Assistant"):
     if not query.strip():
         st.error("Please enter a question before submitting.")
     else:
-        with st.spinner("Retrieving guideline-based evidence..."):
-            headers = {
-                "Authorization": f"Bearer {DIFY_API_KEY}",
-                "Content-Type": "application/json"
-            }
-
-            # ✅ Correct Dify Chat API payload:
-            # - query is TOP-LEVEL
-            # - inputs contains only your workflow input variables
-            payload = {
-                "inputs": {
-                    # These must match your Dify Start-node variable names.
-                    # If your Start node uses Role (capital R), tell me and we’ll change this key.
-                    "role": role,
-                    "findings_json": findings_json
-                },
-                "query": query,
-                "response_mode": "blocking",
-                "user": "streamlit-user"
-            }
-
-            try:
-                response = requests.post(
-                    DIFY_URL,
-                    headers=headers,
-                    json=payload,
-                    timeout=60
-                )
-
-                st.subheader("Assistant Response")
-
-                if response.status_code != 200:
-                    st.error(f"Dify API error {response.status_code}")
-                    st.code(response.text)
-                else:
-                    data = response.json()
-                    answer = data.get("answer")
-
-                    if answer:
-                        st.markdown(answer)
-                    else:
-                        st.warning("No 'answer' field returned. Showing full JSON:")
-                        st.json(data)
-
-            except requests.exceptions.RequestException as e:
-                st.error(f"Request failed: {e}")
-
-# -----------------------------
-# SAFETY DISCLAIMER
-# -----------------------------
-st.divider()
-st.warning(
-    "⚠️ **Clinical Disclaimer**\n\n"
-    "This tool is for educational decision support only. "
-    "It does NOT diagnose, prescribe, or replace the judgment of a licensed dental professional."
-)
+        with st.spinner("R
